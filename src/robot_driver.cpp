@@ -127,7 +127,10 @@ bool arm_control(dof4_robot_arm::Value2Robot::Request &req,
 	dof4_robot_arm::Value2Robot::Response &res) 
 {
     HerkuleX motor;
-    
+
+    // initialize q values to be sent to motors
+    float q_motor[4] = {0, 0, 0, 0};
+
     // get current angle from motor
     float q[4] = {0, 0, 0, 0};
     q[0] = motor.getAngle(M1);
@@ -139,9 +142,6 @@ bool arm_control(dof4_robot_arm::Value2Robot::Request &req,
     for (int i = 0; i < (JointNum-1); i++){
         cout << "current q = " << q[i] << endl;
     }
-
-    // initialize q values gonna be sent to motor
-    float q_motor[4] = {0, 0, 0, 0};
 
     // desired point
     MatrixXf p_desired(4, 1);	// x, y, z, alp
