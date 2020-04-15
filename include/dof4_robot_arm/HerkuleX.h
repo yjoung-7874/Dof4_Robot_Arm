@@ -40,7 +40,7 @@ using namespace std;
 #define CHKSUM_MASK                         0xFE
 
 #define LSB(data) ((unsigned char)(data))
-#define MSB(data) ((unsigned char)((unsigned int)(data)>>8)&0xFF)
+#define MSB(data) ((unsigined char)((unsigned int)(data)>>8)&0xFF)
 
 // LED
 #define HERKULEX_LED_RED	0x10
@@ -75,14 +75,15 @@ public:
     void TorqueOff(int id);		//torque off
 
     void turn(int id, int speed, int playtime=60, int led=0);	//Motor Turn 속도 제어
-    float getTurnSpeed(int id);     						//turn 속도  position변화량/11.2ms 		
+    float getTurnSpeed(int id);     				//turn 속도  position변화량/11.2ms 		
 
     void movePos(int id, int pos, int playtime=60, int led=0);	//Motor의 Position 제어
     void movePos(map<int, int> motor_values, int playtime=60, int led=0);
-    int getPos(int id);								//Motor의 Position 값 리턴
+    int getPos(int id);						//Motor의 Position 값 리턴
 
     void moveAngle(int id, float angle, int playtime=60, int led=0);	//Motor의 각도 제어
-    float getAngle(int id);										//Motor의 각도 값 리턴
+    void moveAngle(map<int, float> motor_angles, int playtime, int led);
+    float getAngle(int id);						//Motor의 각도 값 리턴
 
     void setLed(int id, int led);			//Motor LED
     void reboot(int id);				//Motor
@@ -98,7 +99,6 @@ private:
     int receivePacket();
 
     int fd;				//file description
-
     //data package class
     class DataPacket packet;
 };

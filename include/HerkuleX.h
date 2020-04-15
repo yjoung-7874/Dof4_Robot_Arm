@@ -49,59 +49,59 @@ using namespace std;
 
 class DataPacket{
 public :
-	unsigned char header[2];
-	unsigned char packetSize;
-	unsigned char pID;
-	unsigned char cmd;
-	unsigned char chksum1;
-	unsigned char chksum2;
-	unsigned char data[216];
-	DataPacket(){
-		this->header[0] = HEADER;
-		this->header[1] = HEADER;
-	}
+    unsigned char header[2];
+    unsigned char packetSize;
+    unsigned char pID;
+    unsigned char cmd;
+    unsigned char chksum1;
+    unsigned char chksum2;
+    unsigned char data[216];
+    DataPacket(){
+        this->header[0] = HEADER;
+        this->header[1] = HEADER;
+    }
 };
 
 class HerkuleX {
 public:
-	HerkuleX();			//생성자 : USB2Serial 연결
-	~HerkuleX();		//소멸자 : USB2Serial 연결 해제
+    HerkuleX();			//생성자 : USB2Serial 연결
+    ~HerkuleX();		//소멸자 : USB2Serial 연결 해제
 
-	//void setAckPolicy(int id, bool value);	//응답 정책 설정
-	//void setLEDPolicy(int id, bool value);	//LED 점멸 정책 설정
+    //void setAckPolicy(int id, bool value);	//응답 정책 설정
+    //void setLEDPolicy(int id, bool value);	//LED 점멸 정책 설정
 
-	void clear(int id);				//에러 삭제
+    void clear(int id);				//에러 삭제
 
-	void TorqueOn(int id);		//torque on 
-	void TorqueOff(int id);		//torque off
+    void TorqueOn(int id);		//torque on 
+    void TorqueOff(int id);		//torque off
 
-	void turn(int id, int speed, int playtime=60, int led=0);	//Motor Turn 속도 제어
-	float getTurnSpeed(int id);     						//turn 속도  position변화량/11.2ms 		
+    void turn(int id, int speed, int playtime=60, int led=0);    //Motor Turn 속도 제어
+    float getTurnSpeed(int id);                                  //turn 속도  position변화량/11.2ms
+    void movePos(int id, int pos, int playtime=60, int led=0);	 //Motor의 Position 제어
+    void movePos(map<int, int> motor_values, int playtime=60, int led=0);
+    int getPos(int id);                                          //Motor의 Position 값 리턴
 
-	void movePos(int id, int pos, int playtime=60, int led=0);	//Motor의 Position 제어
-	void movePos(map<int, int> motor_values, int playtime=60, int led=0);
-	int getPos(int id);								//Motor의 Position 값 리턴
+    void moveAngle(int id, float angle, int playtime=60, int led=0); // Motor의 각도 제어
+    void moveAngle(map<int, float> motor_angles, int playtime=60, int led=0);
 
-	void moveAngle(int id, float angle, int playtime=60, int led=0);	//Motor의 각도 제어
-	float getAngle(int id);										//Motor의 각도 값 리턴
+    float getAngle(int id);	                                         // Motor의 각도 값 리턴
 
-	void setLed(int id, int led);			//Motor LED
-	void reboot(int id);				//Motor
+    void setLed(int id, int led);			//Motor LED
+    void reboot(int id);				//Motor
 
 private:
-	bool Open();		//serial port open
-	bool Close();		//serial port close
+    bool Open();		//serial port open
+    bool Close();
 
-	unsigned char getChksum1(class DataPacket * buf);	//Check sum1
-	unsigned char getChksum2(unsigned char chksum1);	//Check sum2
+    unsigned char getChksum1(class DataPacket * buf);	//Check sum1
+    unsigned char getChksum2(unsigned char chksum1);	//Check sum2
 
-	void sendPacket(class DataPacket * buf);			//Packet
-	int receivePacket();
+    void sendPacket(class DataPacket * buf);			//Packet
+    int receivePacket();
 
-	int fd;				//file description
-
-	//data package class
-	class DataPacket packet;
+    int fd;				//file description
+    //data package class
+    class DataPacket packet;
 };
 
 

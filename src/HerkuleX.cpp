@@ -32,35 +32,54 @@ bool HerkuleX::Open()
     }
 
     memset( &newtio, 0, sizeof(newtio) );
-
     newtio.c_cflag = B115200 | CS8 | CLOCAL | CREAD;
     newtio.c_iflag = IGNPAR;
     newtio.c_oflag = 0;
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0;
     newtio.c_cc[VMIN]  = 0;
-
     tcflush (fd, TCIFLUSH );			//reset modem
-    tcsetattr(fd, TCSANOW, &newtio );	//save setting
-
-    //std::cout << "Serial Open! " << fd << std::endl;
+    tcsetattr(fd, TCSANOW, &newtio );		//save setting
+    //std::cout << "Serial(ttyUSB0) Open! " << fd << std::endl;
 
     return true;
 }
 
 bool HerkuleX::Close() {
-	if (fd != 0) {
-		close(fd);
-		//std::cout << "Serial Close! " << fd << std::endl;
-	}
+    if (fd != 0) {
+        close(fd);
+        std::cout << "Serial(ttyUSB0) Close! " << fd << std::endl;
+    }
 }
 
-void HerkuleX::sendPacket(class DataPacket* buf){
-	write(fd, buf, buf->packetSize);
+void HerkuleX::sendPacket(class DataPacket* buf) {
+    write(fd, buf, buf->packetSize);
 }
+
+/*int HerkuleX::receivePacket() {
+    int ret = read(fd, readbuf, sizeof(readbuf));
+    cout << "received byte number = " << ret << endl;
+    return ret;
+}*/
 
 int HerkuleX::receivePacket() {
-	return read(fd, readbuf, sizeof(readbuf));
+    int left = 13;
+    int pos = 0;
+    int tmp = 0;
+    int ret = 0;
+
+    while (left > 0) {
+        tmp = read(fd, readbuf + pos, left);
+        if (tmp < 0) {
+            cout << "receive failed" << endl;
+            return -1;
+        } else {
+            left -= tmp;
+            pos += tmp;
+            ret += tmp;
+        }
+    }
+    return ret;
 }
 
 unsigned char HerkuleX::getChksum1(class DataPacket * buf){
@@ -118,8 +137,8 @@ void HerkuleX::TorqueOff(int id){
     this->packet.chksum2 &= CHKSUM_MASK;
 
     this->sendPacket(&this->packet);
+    //std::cout<<"setHekulex["<<id<<"] Torque on : OK\n";
 
-    //std::cout<<"setHekulex["<<id<<"] Torque off: OK\n";
 }
 
 void HerkuleX::movePos(int id, int pos, int playtime, int led){
@@ -159,19 +178,18 @@ void HerkuleX::movePos(int id, int pos, int playtime, int led){
     this->packet.chksum2 &= CHKSUM_MASK;
 
     this->sendPacket(&this->packet);
-
     //std::cout<< "Succeed to move!\n" ;
 }
 
 void HerkuleX::movePos(std::map<int, int> motor_values, int playtime, int led){
 
-	if(playtime<=0x00)
-		playtime = 0x00;
-	if(playtime >= 0xFE)
-		playtime = 0xFE;
+    if(playtime<=0x00)
+        playtime = 0x00;
+    if(playtime >= 0xFE)
+        playtime = 0xFE;
 
-	this->packet.header[0] = HEADER;
-	this->packet.header[1] = HEADER;
+    this->packet.header[0] = HEADER;
+    this->packet.header[1] = HEADER;
 
     // iterator
     std::map<int, int>::const_iterator iterator;
@@ -183,15 +201,15 @@ void HerkuleX::movePos(std::map<int, int> motor_values, int playtime, int led){
 
     	if(id < 0 || id > 253) continue;
 
-		if(pos<=0)
-			pos = 0;
-		if(pos>=1024)
-			pos = 1024;
+        if(pos<=0)
+            pos = 0;
+        if(pos>=1024)
+            pos = 1024;
 
-		this->packet.data[++idx] = LSB(pos);		//LSB
-		this->packet.data[++idx] = MSB(pos);		//MSB
-		this->packet.data[++idx] = led;				//SET
-		this->packet.data[++idx] = id; 				//ID
+        this->packet.data[++idx] = LSB(pos);		//LSB
+        this->packet.data[++idx] = MSB(pos);		//MSB
+        this->packet.data[++idx] = led;				//SET
+        this->packet.data[++idx] = id; 				//ID
     }
 
     if (idx == 0) return;
@@ -207,9 +225,10 @@ void HerkuleX::movePos(std::map<int, int> motor_values, int playtime, int led){
     this->packet.chksum1 &= CHKSUM_MASK;
     this->packet.chksum2 &= CHKSUM_MASK;
 
-    this->sendPacket(&this->packet);
 
-    //std::cout<< "Succeed to move!\n" ;
+    this->sendPacket(&this->packet);	//to /dev/ttyUSB0
+
+   //std::cout<< "Succeed to move!\n" ;
 }
 
 
@@ -230,30 +249,64 @@ void HerkuleX::setLed(int id, int led){
     this->packet.chksum2 &= CHKSUM_MASK;
 
     this->sendPacket(&this->packet);
-
-	//std::cout<< "color of led is changed!\n";
+    //std::cout<< "color of led is changed!\n";
 
 }
 
 void HerkuleX::moveAngle(int id, float angle, int playtime, int led){
 
-	//Degree = Position Raw Data X 0.325
-	int angValue;
+    // Degree = Position Raw Data X 0.325
+    // motor range : -150 ~ 150 
+    if(angle < -150)
+        angle = -150;
+    if(angle > 150)
+        angle = 150;
 
-	if(angle>320)
-		angle=320;
-	if(angle<0)
-		angle=0;
+    int angValue;
+    angValue = (int)((float)angle / (float)0.325) + 512;
 
-	angValue = (unsigned short int)((float)angle / (float)0.325);
+    if(angValue < 0)
+        angValue = 0;
+    if(angValue > 1024)
+        angValue = 1024;
 
-	if(angValue<0)
-		angValue=0;
-	if(angValue>1024)
-		angValue = 1024;
-
-	this->movePos(id,angValue,playtime,led);
+    this->movePos(id, angValue, playtime,led);
 }
+
+void HerkuleX::moveAngle(std::map<int, float> motor_angles, int playtime, int led) {
+
+    std::map<int, int> motor_values;
+
+    // iterator
+    std::map<int, float>::const_iterator iterator;
+    int idx = 0, id;
+    float angle;
+
+    for (iterator = motor_angles.begin(); iterator != motor_angles.end(); iterator++) {
+        id = iterator->first;
+        angle = iterator->second;
+
+        if(angle < -150) {
+	    angle = -150;
+	    std::cout << "- angle limit reached" << std::endl;
+	}
+        if(angle > 150) {
+	    angle = 150;
+	    std::cout << "+ angle limit reached" << std::endl;
+	}
+
+        int angValue;
+	
+	angValue = (int)((float)angle / (float)0.325) + 512;
+        if(angValue < 0) angValue = 0;
+        if(angValue > 1024) angValue = 1024;
+
+        motor_values.insert(std::pair<int, int> (id, angValue));
+    }
+
+    this->movePos(motor_values, playtime, led);
+}
+
 
 void HerkuleX::clear(int id){
     this->packet.packetSize = MIN_PACKET_SIZE + 3;
@@ -270,7 +323,8 @@ void HerkuleX::clear(int id){
     this->packet.chksum1 &= CHKSUM_MASK;
     this->packet.chksum2 &= CHKSUM_MASK;
 
-	this->sendPacket(&this->packet);
+    this->sendPacket(&this->packet);
+    
 }
 
 void HerkuleX::reboot(int id){
@@ -284,7 +338,7 @@ void HerkuleX::reboot(int id){
     this->packet.chksum1 &= CHKSUM_MASK;
     this->packet.chksum2 &= CHKSUM_MASK;
 
-    this->sendPacket(&this->packet);  
+    this->sendPacket(&this->packet);
 }
 
 void HerkuleX::turn(int id, int speed, int playtime, int led){
@@ -318,67 +372,65 @@ void HerkuleX::turn(int id, int speed, int playtime, int led){
     this->packet.chksum2 &= CHKSUM_MASK;
 
     this->sendPacket(&this->packet);
-
 }
 
-int HerkuleX::getPos(int id){
-	int position;
+int HerkuleX::getPos(int id) {
+    int position;
 
-	if (id < 0 || id > 253) return -1;
+    if (id < 0 || id > 253) return -1;
 
-	this->packet.packetSize = MIN_PACKET_SIZE+2;
-	this->packet.pID = id;
-	this->packet.cmd = CMD_RAM_READ;
+    this->packet.packetSize = MIN_PACKET_SIZE+2;
+    this->packet.pID = id;
+    this->packet.cmd = CMD_RAM_READ;
 
-	this->packet.data[0] = 0x3A;
-	this->packet.data[1] = 0x02;
+    this->packet.data[0] = 0x3A;
+    this->packet.data[1] = 0x02;
 
-	//CheckSum
-	this->packet.chksum1 = this->getChksum1(&this->packet);
-	this->packet.chksum2 = this->getChksum2(this->packet.chksum1);
-	this->packet.chksum1 &= CHKSUM_MASK;
-	this->packet.chksum2 &= CHKSUM_MASK;
+    //CheckSum
+    this->packet.chksum1 = this->getChksum1(&this->packet);
+    this->packet.chksum2 = this->getChksum2(this->packet.chksum1);
+    this->packet.chksum1 &= CHKSUM_MASK;
+    this->packet.chksum2 &= CHKSUM_MASK;
 
-	this->sendPacket(&this->packet);
+    this->sendPacket(&this->packet);
+    usleep(10000);
 
-	usleep(10000);
+    if (receivePacket() < 13) return -1;
+    position = ((readbuf[9]&0xff) | ((readbuf[10]&0x03) << 8));
 
-	if (receivePacket() < 13) return -1;
-
-	position = ((readbuf[9]&0xff) | ((readbuf[10]&0x03) << 8));
-	return position;
+    return position;
 }
 
 float HerkuleX::getTurnSpeed(int id){
-	int speed;
+    int speed;
 
-	if (id < 0 || id > 253) return -1;
+    if (id < 0 || id > 253) return -1;
 
-	this->packet.packetSize = MIN_PACKET_SIZE+2;
-	this->packet.pID = id;
-	this->packet.cmd = CMD_RAM_READ;
+    this->packet.packetSize = MIN_PACKET_SIZE+2;
+    this->packet.pID = id;
+    this->packet.cmd = CMD_RAM_READ;
 
-	this->packet.data[0] = 0x40;
-	this->packet.data[1] = 0x02;
+    this->packet.data[0] = 0x40;
+    this->packet.data[1] = 0x02;
 
-	//CheckSum
-	this->packet.chksum1 = this->getChksum1(&this->packet);
-	this->packet.chksum2 = this->getChksum2(this->packet.chksum1);
-	this->packet.chksum1 &= CHKSUM_MASK;
-	this->packet.chksum2 &= CHKSUM_MASK;
+    //CheckSum
+    this->packet.chksum1 = this->getChksum1(&this->packet);
+    this->packet.chksum2 = this->getChksum2(this->packet.chksum1);
+    this->packet.chksum1 &= CHKSUM_MASK;
+    this->packet.chksum2 &= CHKSUM_MASK;
 
-	this->sendPacket(&this->packet);
 
-	usleep(10000);
-
-	if (receivePacket() < 13) return -1;
-
+    this->sendPacket(&this->packet);
+    usleep(10000);
+     
+    if (receivePacket() < 13) return -1;
+   
     speed = ((readbuf[10] & 0x03) << 8) | (readbuf[9] & 0xFF);
     if ((readbuf[10] & 0x40) == 0x40){
     	speed = (1024 - speed) * -1;
     }
 
-	return speed;
+    return speed;
 }
 
 
@@ -386,8 +438,9 @@ float HerkuleX::getAngle(int id){
     float angle;
 
     int pos = this->getPos(id);
+    
     if (pos < 0) return 0;
-	angle = (pos - 512) * 0.325f;
+    angle = (pos - 512) * 0.325f;
 
     return angle;
 }

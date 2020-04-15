@@ -68,7 +68,12 @@
 #include "ros/ros.h"
 #include <dof4_robot_arm/Value2Robot.h>
 #include "HerkuleX.h"
+#include <unistd.h>
+
 #include <vector>
+#include <map>
+
+#include <unistd.h>
 #include <iostream>
 #include <cmath>
 // #include <Eigen/Eigen>
@@ -85,7 +90,7 @@
 
 // Motor Val
 #define Dplaytime 3000/11.2
-
+#define Dqval 30
 #define LEDg 0x04
 #define LEDb 0x08
 #define LEDr 0x10
@@ -93,28 +98,37 @@
 // Unit Convert
 #define INCH2MM 25.4
 #define SEC2HZ  1000/11.2       // sec -> motor control hz
+#define PI 3.14159265
+#define rad2deg 180/PI
+#define deg2rad PI/180
 
 // Robot Param
-#define l0 3.584 * INCH2MM // 1.472 + 2.112 inch -> mm
-#define l1 3.649 * INCH2MM
-#define l2 3.249 * INCH2MM
-#define l3 65.5	           // line 100
+#define l0 91.0336		// 1.472 + 2.112 inch -> mm
+#define l1 82.5246
+#define l2 82.5246 
+#define l3 65.5          	// line 100
 
 // Steps for integration (d_q -> q)
-#define STEPS 1000000 // nanosec
+#define STEPS 1000		//  millisec
 
 using namespace std;
 using namespace Eigen;
 
+HerkuleX motor;
+
 bool init(){
-    HerkuleX motor;
+//    HerkuleX motor;
+    int motor_id[JointNum] = {M1, M2, M3, M4};
+
+    map<int,float> init_motor;
     
-    motor.TorqueOn(BROADCAST_ID);
-    
-    for(int i=0; i<(JointNum-1); i++){
-        motor.moveAngle(i, 0, Dplaytime, HERKULEX_LED_GREEN);
+    for (int i = 0; i < JointNum; i++) {
+        motor.TorqueOn(motor_id[i]);
+	init_motor[motor_id[i]] = Dqval;
     }
 
+    motor.moveAngle(init_motor, Dplaytime, HERKULEX_LED_GREEN);
+    
     return true;
 }
 
@@ -126,39 +140,42 @@ float d_p_func(float coeff1, float coeff2, float coeff3, float coeff4, float coe
 bool arm_control(dof4_robot_arm::Value2Robot::Request &req, 
 	dof4_robot_arm::Value2Robot::Response &res) 
 {
-    HerkuleX motor;
+    // get HerkuleX motor class
+//    HerkuleX motor;
 
-    // initialize q values to be sent to motors
-    float q_motor[4] = {0, 0, 0, 0};
+    // initialize motor id
+    int motor_id[JointNum] = {M1, M2, M3, M4};
+
+    // q values to be sent to motors
+    map<int, float> q_motor;
 
     // get current angle from motor
-    float q[4] = {0, 0, 0, 0};
-    q[0] = motor.getAngle(M1);
-    q[1] = motor.getAngle(M2);
-    q[2] = motor.getAngle(M3);
-    q[3] = motor.getAngle(M4);
+    float q[JointNum] = {0, 0, 0, 0};
 
-    // debug
-    for (int i = 0; i < (JointNum-1); i++){
-        cout << "current q = " << q[i] << endl;
+    for (int i = 0; i < JointNum; i++) {
+        q[i] = motor.getAngle(motor_id[i]) * deg2rad;
+        cout << i << "th motor angle = " << q[i] * rad2deg << endl;
     }
 
-    // desired point
-    MatrixXf p_desired(4, 1);	// x, y, z, alp
-
     // q dot, p dot
-    MatrixXf d_p(4, 1);		// d_x, d_y, d_z, d_alp
-    MatrixXf d_q(4, 1);		// d_q0, d_q1, d_q2, d_q3
+    Vector4f d_p(4);		// d_x, d_y, d_z, d_alp
+    Vector4f d_q(4);		// d_q0, d_q1, d_q2, d_q3
 
     // Jacobian for d_q 
-    Matrix4f J(4, 4);
+    Matrix4f J;
 
     // initial point (x, y, z : mm / alpha : degree)
     float x0 = ((l1*sin(q[1]) + l2*sin(q[1]+q[2]) + l3*sin(q[1]+q[2]+q[3]))*cos(q[0]));
     float y0 = (l1*sin(q[1]) + l2*sin(q[1]+q[2]) + l3*sin(q[1]+q[2]+q[3]))*sin(q[0]);
-    float z0 = l1*cos(q[1]) + l2*cos(q[1]+q[2]) + l3*cos(q[1]+q[2]+q[3]) + l0;
+    float z0 = l1*cos(q[1]) + l2*cos(q[1]+q[2]) + l3*cos(q[1]+q[2]+q[3]);
     float alp0 = q[1] + q[2] + q[3];
-    
+
+    cout << "[debug]" << endl; 
+    cout << "current x0   = " << x0 << endl;
+    cout << "current y0   = " << y0 << endl;
+    cout << "current z0   = " << z0 << endl;
+    cout << "current alp0 = " << alp0  << endl;
+
     // Desired point (x, y, z : mm / alpha : degree)
     float xf = req.x;
     float yf = req.y;
@@ -167,175 +184,126 @@ bool arm_control(dof4_robot_arm::Value2Robot::Request &req,
     float t0 = req.t0;
     float tf = req.tf;
     // float betf = req.beta;
+    alpf = alpf * deg2rad;
 
     // Path Planning
     // coefficients of path(linear) equation
-    MatrixXf coeff_x(6, 1);
-    MatrixXf coeff_y(6 ,1);
-    MatrixXf coeff_z(6 ,1);
-    MatrixXf coeff_alp(6,1);
+    VectorXf coeff_x(6);
+    VectorXf coeff_y(6);
+    VectorXf coeff_z(6);
+    VectorXf coeff_alp(6);
 
     // Matrix of time(t0 and tf) for solving path(linear) equation
     MatrixXf T(6, 6);
     
     // Matrix of initial and final points
-    MatrixXf i_f_x(6, 1);
-    MatrixXf i_f_y(6, 1);
-    MatrixXf i_f_z(6, 1);
-    MatrixXf i_f_alp(6, 1);
+    VectorXf i_f_x(6);
+    VectorXf i_f_y(6);
+    VectorXf i_f_z(6);
+    VectorXf i_f_alp(6);
 
-    // Initial and final point.
-    i_f_x(0, 0) = x0;
-    i_f_x(1, 0) = 0;
-    i_f_x(2, 0) = 0;
-    i_f_x(3, 0) = xf;
-    i_f_x(4, 0) = 0;
-    i_f_x(5, 0) = 0;
-    
-    i_f_y(0, 0) = y0;
-    i_f_y(1, 0) = 0;
-    i_f_y(2, 0) = 0;
-    i_f_y(3, 0) = yf;
-    i_f_y(4, 0) = 0;
-    i_f_y(5, 0) = 0;
-
-    i_f_z(0, 0) = z0;
-    i_f_z(1, 0) = 0;
-    i_f_z(2, 0) = 0;
-    i_f_z(3, 0) = zf;
-    i_f_z(4, 0) = 0;
-    i_f_z(5, 0) = 0;
-
-    i_f_alp(0, 0) = alp0;
-    i_f_alp(0, 0) = 0;
-    i_f_alp(0, 0) = 0;
-    i_f_alp(0, 0) = alpf;
-    i_f_alp(0, 0) = 0;
-    i_f_alp(0, 0) = 0;
+    // Initial and final point
+    i_f_x   << x0, 0, 0, xf, 0, 0;
+    i_f_y   << y0, 0, 0, yf, 0, 0;
+    i_f_z   << z0, 0, 0, zf, 0, 0;
+    i_f_alp << alp0, 0, 0, alpf, 0, 0;
 
     // T matrix
-    T(0, 0) = pow(t0,5);
-    T(1, 0) = 5*pow(t0,4);
-    T(2, 0) = 20*pow(t0,3);
-    T(3, 0) = pow(tf,5);
-    T(4, 0) = 5*pow(tf,4);
-    T(5, 0) = 20*pow(tf,3);
-
-    T(0, 1) = pow(t0,4);
-    T(1, 1) = 4*pow(t0,3);
-    T(2, 1) = 12*pow(t0,2);
-    T(3, 1) = pow(tf,4);
-    T(4, 1) = 4*pow(tf,3);
-    T(5, 1) = 12*pow(tf,2);
-
-    T(0, 2) = pow(t0,3);
-    T(1, 2) = 3*pow(t0,2);
-    T(2, 2) = 6*t0;
-    T(3, 2) = pow(tf, 3);
-    T(4, 2) = 3*pow(tf,2);
-    T(5, 2) = 6*tf;
-
-    T(0, 3) = pow(t0,2);
-    T(1, 3) = 2*t0;
-    T(2, 3) = 1;
-    T(3, 3) = pow(tf,2);
-    T(4, 3) = 2*tf;
-    T(5, 3) = 1;
-
-    T(0, 4) = t0;
-    T(1, 4) = 1;
-    T(2, 4) = 0;
-    T(3, 4) = tf;
-    T(4, 4) = 1;
-    T(5, 4) = 0;
-
-    T(0, 5) = 1;
-    T(1, 5) = 0;
-    T(2, 5) = 0;
-    T(3, 5) = 1;
-    T(4, 5) = 0;
-    T(5, 5) = 0;
-
+    T <<  pow(t0,5),    pow(t0,4),    pow(t0,3),   pow(t0,2), t0, 1,
+          5*pow(t0,4),  4*pow(t0,3),  3*pow(t0,2), 2*t0,      1,  0,
+	  20*pow(t0,3), 12*pow(t0,2), 6*t0,        1,         0,  0,
+          pow(tf,5),    pow(tf,4),    pow(tf,3),   pow(tf,2), tf, 1,
+          5*pow(tf,4),  4*pow(tf,3),  3*pow(tf,2), 2*tf,      1,  0,
+          20*pow(tf,3), 12*pow(tf,2), 6*tf,        1,         0,  0;
+    
     //find each coefficient according to the point assigned by using eigen.
-    coeff_x = T.colPivHouseholderQr().solve(i_f_x);
-    coeff_y = T.colPivHouseholderQr().solve(i_f_y);
-    coeff_z = T.colPivHouseholderQr().solve(i_f_z);
-    coeff_alp = T.colPivHouseholderQr().solve(i_f_alp);
-
-    // Jacobian J
-    // x,y,z,alpha & q0,q1,q2,q3 -> 4x4 Jacobian symmetric
-    J(0, 0) = -sin(q[0]) * (l1 * sin(q[1]) + l2 * sin(q[1]+q[2]) + l3 * sin(q[1]+q[2]+q[3]));
-    J(1, 0) = cos(q[0]) * (l1 * sin(q[1]) + l2 * sin(q[1]+q[2]) + l3 * sin(q[1]+q[2]+q[3]));
-    J(2, 0) = 0;
-    J(3, 0) = 0;
-    // J(4, 0) = 1;
-
-    J(0, 1) = cos(q[0]) * (l1 * cos(q[1]) + l2 * cos(q[1]+q[2]) + l3 * cos(q[1]+q[2]+q[3]));
-    J(1, 1) = sin(q[0]) * (l1 * cos(q[1]) + l2 * cos(q[1]+q[2]) + l3 * cos(q[1]+q[2]+q[3]));
-    J(2, 1) = -(l1 * sin(q[1]) + l2 * sin(q[1]+q[2]) + l3 * sin(q[1]+q[2]+q[3]));
-    J(3, 1) = 1;
-    // J(4, 1) = 0;
-
-    J(0, 2) = cos(q[0]) * (l2 * cos(q[1]+q[2]) + l3 * cos(q[1]+q[2]+q[3]));
-    J(1, 2) = sin(q[0]) * (l2 * cos(q[1]+q[2]) + l3 * cos(q[1]+q[2]+q[3]));
-    J(2, 2) = -(l2 * sin(q[1]+q[2]) + l3 * sin(q[1]+q[2]+q[3]));
-    J(3, 2) = 1;
-    // J(4, 2) = 0;
-
-    J(0, 3) = cos(q[0]) * l3 * cos(q[1]+q[2]+q[3]);
-    J(1, 3) = sin(q[0]) * l3 * cos(q[1]+q[2]+q[3]);
-    J(2, 3) = -(l3 * sin(q[1]+q[2]+q[3]));
-    J(3, 3) = 1;
-    // J(4, 3) = 0;
+    coeff_x = T.completeOrthogonalDecomposition().solve(i_f_x);
+    coeff_y = T.completeOrthogonalDecomposition().solve(i_f_y);
+    coeff_z = T.completeOrthogonalDecomposition().solve(i_f_z);
+    coeff_alp = T.completeOrthogonalDecomposition().solve(i_f_alp);
 
     // angle integration for angle to move (d_p -> d_q -> q)
     // time step for integration
-    float time_step = (tf - t0) / STEPS; 
-    
-    // get accurate integration of values according to the initial and final time.
-    for (int i = 0; i < STEPS; i++) {
-        float d_x = d_p_func(coeff_x(0, 0), coeff_x(1, 0), coeff_x(2, 0), coeff_x(3, 0), coeff_x(4, 0), (t0 + (i + 0.5) * time_step));
-        float d_y = d_p_func(coeff_y(0, 0), coeff_y(1, 0), coeff_y(2, 0), coeff_y(3, 0), coeff_y(4, 0), (t0 + (i + 0.5) * time_step));
-	float d_z = d_p_func(coeff_z(0, 0), coeff_z(1, 0), coeff_z(2, 0), coeff_z(3, 0), coeff_z(4, 0), (t0 + (i + 0.5) * time_step));
-	float d_alp = d_p_func(coeff_alp(0, 0), coeff_alp(1, 0), coeff_alp(2, 0), coeff_alp(3, 0), coeff_alp(4, 0), (t0 + (i + 0.5) * time_step));
+    int   moving_steps = (tf - t0) * STEPS;
+    cout << "moving steps = " << moving_steps << endl;
+    float time_step = 1.0/STEPS;
+    cout << "time step = " << time_step << endl;
+
+    for (int i = 0; i < moving_steps; i++) {
+        // Jacobian J
+        // x, y, z, alpha & q0, q1, q2, q3 -> 4 x 4 Jacobian symmetric
+        J(0, 0) = -sin(q[0]) * ((l1 * sin(q[1])) + (l2 * sin(q[1] + q[2])) + (l3 * sin(q[1] + q[2] + q[3])));
+        J(1, 0) =  cos(q[0]) * ((l1 * sin(q[1])) + (l2 * sin(q[1] + q[2])) + (l3 * sin(q[1] + q[2] + q[3])));
+        J(2, 0) = 0;
+        J(3, 0) = 0;
+
+        J(0, 1) =  cos(q[0]) * ((l1 * cos(q[1])) + (l2 * cos(q[1] + q[2])) + (l3 * cos(q[1] + q[2] + q[3])));
+        J(1, 1) =  sin(q[0]) * ((l1 * cos(q[1])) + (l2 * cos(q[1] + q[2])) + (l3 * cos(q[1] + q[2] + q[3])));
+        J(2, 1) = -((l1 * sin(q[1])) + (l2 * sin(q[1] + q[2])) + (l3 * sin(q[1] + q[2] + q[3])));
+        J(3, 1) = 1;
+
+        J(0, 2) =  cos(q[0]) * ((l2 * cos(q[1] + q[2])) + (l3 * cos(q[1] + q[2] + q[3])));
+        J(1, 2) =  sin(q[0]) * ((l2 * cos(q[1] + q[2])) + (l3 * cos(q[1] + q[2] + q[3])));
+        J(2, 2) = -((l2 * sin(q[1] + q[2])) + (l3 * sin(q[1] + q[2] + q[3])));
+        J(3, 2) = 1;
+
+        J(0, 3) =  cos(q[0]) * l3 * cos(q[1] + q[2] + q[3]);
+        J(1, 3) =  sin(q[0]) * l3 * cos(q[1] + q[2] + q[3]);
+        J(2, 3) = -(l3 * sin(q[1] + q[2] + q[3]));
+        J(3, 3) = 1;
+
+        float d_x   = d_p_func(coeff_x(0),   coeff_x(1),   coeff_x(2),   coeff_x(3),   coeff_x(4),   (t0 + ((i+0.5) * time_step)));
+        float d_y   = d_p_func(coeff_y(0),   coeff_y(1),   coeff_y(2),   coeff_y(3),   coeff_y(4),   (t0 + ((i+0.5) * time_step)));
+        float d_z   = d_p_func(coeff_z(0),   coeff_z(1),   coeff_z(2),   coeff_z(3),   coeff_z(4),   (t0 + ((i+0.5) * time_step)));
+        float d_alp = d_p_func(coeff_alp(0), coeff_alp(1), coeff_alp(2), coeff_alp(3), coeff_alp(4), (t0 + ((i+0.5) * time_step)));
+
+        // d_p for Jacobian caculation 
+        d_p(0) = d_x;
+        d_p(1) = d_y;
+        d_p(2) = d_z;
+        d_p(3) = d_alp;
 	
-	// d_p for Jacobian caculation 
-	d_p(0, 0) = d_x;
-        d_p(1, 0) = d_y;
-        d_p(2, 0) = d_z;
-        d_p(3, 0) = d_alp;
-	
-	// find d_q from Jacobian using eigen
-    	d_q = J.colPivHouseholderQr().solve(d_p);
-        
-	// sum up for integration	
-	for (int j = 0; i < (JointNum - 1); i++){
-            q_motor[j] += d_q(j, 0) * time_step;
+        // find d_q from Jacobian using eigen
+        d_q = J.completeOrthogonalDecomposition().solve(d_p);
+
+	// do integration
+	for (int j =0; j < JointNum; j++) {
+	    q[j] = q[j] + (d_q(j) * time_step);
 	}
+    }
+
+    cout << "[Send data to motor]" << endl;
+    // put motor values into map	
+    for (int j = 0; j < JointNum; j++) {
+        q_motor[motor_id[j]] = q[j]*rad2deg;
+        // debug
+        cout << j << "th desired q_val to motor: " << q_motor[j] << endl;
     }
 
     // calculate robot play time
     int playtime = (tf - t0) * SEC2HZ;
 
     // send integrated q values to motors.
-    for(int i=0; i<(JointNum-1); i++){
-        motor.moveAngle(i, q_motor[i], playtime, HERKULEX_LED_BLUE);
-    }
-
+    motor.moveAngle(q_motor, playtime, HERKULEX_LED_BLUE);
+    cout << "robot moving..." << endl;
     ros::Duration(tf - t0).sleep();
 
     float q_check[4];
-    
-    q_check[0] = motor.getAngle(M1);
-    q_check[1] = motor.getAngle(M2);
-    q_check[2] = motor.getAngle(M3);
-    q_check[3] = motor.getAngle(M4);
+
+    cout << "[debug]" << endl;    
+    for (int i = 0; i < JointNum; i ++) { 
+        q_check[i] = motor.getAngle(motor_id[i]) * deg2rad;
+	cout << i << "th q_val from motor: " << q_check[i] * rad2deg << endl;
+    }
 
     res.cur_x = ((l1*sin(q_check[1]) + l2*sin(q_check[1]+q_check[2]) + l3*sin(q_check[1]+q_check[2]+q_check[3]))*cos(q_check[0]));
     res.cur_y = (l1*sin(q_check[1]) + l2*sin(q_check[1]+q_check[2]) + l3*sin(q_check[1]+q_check[2]+q_check[3]))*sin(q_check[0]);
-    res.cur_z = l1*cos(q_check[1]) + l2*cos(q_check[1]+q_check[2]) + l3*cos(q_check[1]+q_check[2]+q_check[3]) + l0;
-    res.cur_alp = q_check[1] + q_check[2] + q_check[3];
+    res.cur_z = l1*cos(q_check[1]) + l2*cos(q_check[1]+q_check[2]) + l3*cos(q_check[1]+q_check[2]+q_check[3]);
+    res.cur_alp = (q_check[1] + q_check[2] + q_check[3]) * rad2deg;
 
+    for (int i = 0; i < JointNum; i++){
+        motor.setLed(motor_id[i], HERKULEX_LED_GREEN);
+    }
     res.result = 1;
     
     return true;

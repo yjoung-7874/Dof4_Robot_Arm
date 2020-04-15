@@ -1,6 +1,6 @@
 // ROS node get data from server and request to motor.
 #include "ros/ros.h"
-#include "center_bridge/MotorValue.h"
+#include <dof4_robot_arm/Value2Robot.h>
 #include <iostream>
 #include <vector>
 #include <sstream>
@@ -21,51 +21,39 @@
 
 using namespace std;
 
-
 int main(int argc, char **argv){
-    ros::init(argc, argv, "center_motor_bridge");
+    ros::init(argc, argv, "iot_interface");
     ros::NodeHandle nh;
-    ros::ServiceClient client = nh.serviceClient<center_bridge::MotorValue>("Motor_Value");
+    ros::ServiceClient client = nh.serviceClient<dof4_robot::Value2Robot>("Cmd2Dof4Robot");
 
-    center_bridge::MotorValue srv;
+    // srv to robot
+    dof4_robot_arm::Value2Robot srv;
+    float desired[6]= {0, 0, 0, 0, 0, 0};
 
-    struct sockaddr_in address;
-    int sock = 0, valread;
-    struct sockaddr_in serv_addr;
-
+    // server
     char to_server[257] = "cmd received\n";
     char from_server[1024];
 
+    // string splitter
     char *pch;
-
-    int NumOfMotor, NumOfLED;
-    int motorID, motorVal;
-    int ledID, ledVal;
-
-    map<int, int> tmp_led_val = {
-                                 {0,0x10}, {1,0x08}, {2,0x10}, {3,0x10}, {4,0x08},
-                                 {5,0x10}, {6,0x08}, {7,0x10}, {8,0x08}, {9,0x10}
-                                };
-
-    map<int, int> tmp_motor_val = {
-                                   {0,100}, {1,200}, {2,300}, {3,400}, {4,500},
-                                   {5,600}, {6,700},{7,800},{8,900},{9,1000}
-                                  };
 
     string type;
     string tmp;
 
+    // values for socket 
+    struct sockaddr_in address;
+    int sock = 0, valread;
+    struct sockaddr_in serv_addr;
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         printf("\n Socket creation error \n");
         return -1;
     }
-
     memset(&serv_addr, '0', sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(PORT);
 
     // Convert IPv4 and IPv6 addresses from text to binary form
-    if(inet_pton(AF_INET, "119.67.210.8", &serv_addr.sin_addr) <= 0) {
+    if(inet_pton(AF_INET, "1.222.20.246", &serv_addr.sin_addr) <= 0) {
         printf("\nInvalid address/ Address not supported \n");
         return -1;
     }
@@ -74,27 +62,7 @@ int main(int argc, char **argv){
         return -1;
     }
 
-    for(int i =0 ; i< 10; i++){
-        srv.request.job_description.push_back(0);
-        srv.request.id.push_back(i);
-        srv.request.motor_value.push_back(100);
-        srv.request.playtime.push_back(0);
-        srv.request.led.push_back(0x08);
-    }
-
-    if(client.call(srv)){
-        ROS_INFO("Received = %ld", (long int)srv.response.result);
-//        srv.request.job_description.clear();
-//        srv.request.id.clear();
-//        srv.request.motor_value.clear();
-//        srv.request.playtime.clear();
-//        srv.request.led.clear();
-    } else {
-        ROS_ERROR("Failed to call service");
-        return 1;
-    }
-
-    //main loop receiving cmd from hive
+    // main loop receiving cmd from hive
     while(ros::ok()){
 
         //recv msg from server
@@ -103,7 +71,7 @@ int main(int argc, char **argv){
         else
             printf("from server : %s", from_server);
 
-        //send response to server
+	//send response to server
         if(send(sock, to_server, strlen(to_server), 0) < 0)
             std::cout<<"send failed"<<endl;
         else {
@@ -117,39 +85,46 @@ int main(int argc, char **argv){
 
         if(type == "move") {
             pch = strtok(NULL," ");
-            cout << "Number of Motors : " << std::string(pch) << endl;
-	    NumOfMotor = atoi(pch);
-            if(NumOfMotor > 1){
-		for(int i =0; i < NumOfMotor; i++) {
-                    pch = strtok(NULL," ");
-		    motorID = atoi(pch);
-		    cout << "motor id = " << motorID << endl;
-                    srv.request.job_description.at(motorID) = MULTI_MOTORS;
-                    srv.request.id.at(motorID) = motorID; // put motor id to request
+	    float x_ = atof(pch);
+	    pch = strtok(NULL," ");
+	    float y_ = atof(pch);
+	    pch = strtok(NULL," ");
+	    float z_ = atof(pch);
+            pch = strtok(NULL," ");
+	    float alp_ = atof(pch);
+            pch = strtok(NULL," ");
+	    float t0_ = atof(pch);
+	    pch = strtok(NULL," ");
+	    float tf_ = atof(pch);
 
-                    pch = strtok(NULL," ");
-		    motorVal = atoi(pch);
-                    cout << "motor value = " << motorVal << endl;
-		    srv.request.motor_value.at(motorID) = motorVal;
-		    tmp_motor_val.at(motorID) = motorVal;
-		    srv.request.led.at(motorID) = tmp_led_val.at(motorID);
-	            srv.request.playtime.at(motorID) = DEFAULT_PTIME;
-		}
-	    } else {
-                pch = strtok(NULL," ");
-                motorID = atoi(pch);
-                cout << "motor id = " << motorID << endl;
-                srv.request.job_description.at(motorID) = MULTI_MOTORS;
-                srv.request.id.at(motorID) = motorID; // put motor id to request
+	    cout << "x   = " << x_ << endl;
+            cout << "y   = " << y_ << endl;
+            cout << "z   = " << z_ << endl;
+            cout << "alp = " << alp_ << endl;
+            cout << "t0  = " << t0_ << endl; 
+            cout << "tf  = " << tf_ << endl;
 
-                pch = strtok(NULL," ");
-                motorVal = atoi(pch);
-                cout << "motor value = " << motorVal << endl;
-                srv.request.motor_value.at(motorID) = motorVal;
-                tmp_motor_val.at(motorID) = motorVal;
-                srv.request.led.at(motorID) = tmp_led_val.at(motorID);
-                srv.request.playtime.at(motorID) = DEFAULT_PTIME;
-	    }
+	    srv.request.x = x_;
+	    srv.request.y = y_;
+	    srv.request.z = z_;
+	    srv.request.alp = alp_;
+	    srv.request.t0 = t0_;
+	    srv.request.tf = tf_;
+	} else {
+            pch = strtok(NULL," ");
+            motorID = atoi(pch);
+            cout << "motor id = " << motorID << endl;
+            srv.request.job_description.at(motorID) = MULTI_MOTORS;
+            srv.request.id.at(motorID) = motorID; // put motor id to request
+
+            pch = strtok(NULL," ");
+            motorVal = atoi(pch);
+            cout << "motor value = " << motorVal << endl;
+            srv.request.motor_value.at(motorID) = motorVal;
+            tmp_motor_val.at(motorID) = motorVal;
+            srv.request.led.at(motorID) = tmp_led_val.at(motorID);
+            srv.request.playtime.at(motorID) = DEFAULT_PTIME;
+	}
 
 	    if(client.call(srv)){
 	        ROS_INFO("Received = %ld", (long int)srv.response.result);
