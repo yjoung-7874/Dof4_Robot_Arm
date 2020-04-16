@@ -8,14 +8,12 @@ ROS implementation of 4 Dof Robot Arm consisted with 3D printed PLA links and He
 
 ### B. Installation
 Clone the repository inside src/ directory of your catkin workspace
-1. mkdir obstacle_processor
-2. cd obstacle_processor/
-3. git clone name_of_repository
-4. Run CMake to compile source code
+1. git clone name_of_repository
+2. Run CMake to compile source code
     catkin_make
-5. roscore
-6. rosrun dof4_robot_arm dof4_robot_arm_node
-7. rosrun dof4_robot_arm dof4_robot_arm_client
+3. roscore
+4. rosrun dof4_robot_arm dof4_robot_arm_node
+5. rosrun dof4_robot_arm dof4_robot_arm_client
 
 ### C. TODO
 0. GAZEBO simulation -> Robot moving
