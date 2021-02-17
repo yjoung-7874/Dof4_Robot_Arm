@@ -15,6 +15,9 @@ roscore
 rosrun dof4_robot_arm dof4_robot_arm_node
 rosrun dof4_robot_arm dof4_robot_arm_client
 ```
-### C. TODO
+### C. Experiment Video
+https://youtu.be/I8n40YT5L0M
+
+### D. TODO
 0. GAZEBO simulation -> Robot moving
 1. IOT robot arm control
