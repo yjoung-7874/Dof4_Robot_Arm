@@ -6,7 +6,10 @@ Raspberry pi + ROS implementation of 4 Dof Robot Arm consisted with 3D printed P
 1. Ubuntu 16.04+
 2. ROS kinetic
 
-### B. Installation
+### B. System Diagram
+![alt text](https://raw.githubusercontent.com/yjoung-7874/mern_stack/blob/master/Diagram.png)
+
+### C. Installation
 Clone the repository inside src/ directory of your catkin workspace
 ```
 git clone "link of repository"
@@ -15,9 +18,9 @@ roscore
 rosrun dof4_robot_arm dof4_robot_arm_node
 rosrun dof4_robot_arm dof4_robot_arm_client
 ```
-### C. Experiment Video
+### D. Experiment Video
 https://youtu.be/I8n40YT5L0M
 
-### D. TODO
+### E. TODO
 0. GAZEBO simulation -> Robot moving
 1. IOT robot arm control
