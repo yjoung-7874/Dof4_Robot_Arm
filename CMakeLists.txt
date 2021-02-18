@@ -147,6 +147,9 @@ add_executable(${PROJECT_NAME}_client src/robot_client.cpp)
 target_link_libraries(${PROJECT_NAME}_client ${catkin_LIBRARIES})
 add_dependencies(${PROJECT_NAME}_client ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+add_executable(${PROJECT_NAME}_path src/robot_path.cpp)
+target_link_libraries(${PROJECT_NAME}_path ${catkin_LIBRARIES}) 
+add_dependencies(${PROJECT_NAME}_path ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 #############
 ## Install ##
 #############

@@ -106,7 +106,7 @@
 #define l0 91.0336		// 1.472 + 2.112 inch -> mm
 #define l1 82.5246
 #define l2 82.5246 
-#define l3 65.5          	// line 100
+#define l3 71.8          	// line 100
 
 // Steps for integration (d_q -> q)
 #define STEPS 1000		//  millisec
@@ -138,7 +138,7 @@ float d_p_func(float coeff1, float coeff2, float coeff3, float coeff4, float coe
 }
 
 bool arm_control(dof4_robot_arm::Value2Robot::Request &req, 
-	dof4_robot_arm::Value2Robot::Response &res) 
+                 dof4_robot_arm::Value2Robot::Response &res) 
 {
     // get HerkuleX motor class
 //    HerkuleX motor;
@@ -168,13 +168,7 @@ bool arm_control(dof4_robot_arm::Value2Robot::Request &req,
     float x0 = ((l1*sin(q[1]) + l2*sin(q[1]+q[2]) + l3*sin(q[1]+q[2]+q[3]))*cos(q[0]));
     float y0 = (l1*sin(q[1]) + l2*sin(q[1]+q[2]) + l3*sin(q[1]+q[2]+q[3]))*sin(q[0]);
     float z0 = l1*cos(q[1]) + l2*cos(q[1]+q[2]) + l3*cos(q[1]+q[2]+q[3]);
-    float alp0 = q[1] + q[2] + q[3];
-
-    cout << "[debug]" << endl; 
-    cout << "current x0   = " << x0 << endl;
-    cout << "current y0   = " << y0 << endl;
-    cout << "current z0   = " << z0 << endl;
-    cout << "current alp0 = " << alp0  << endl;
+    float alp0 = (q[1] + q[2] + q[3]);
 
     // Desired point (x, y, z : mm / alpha : degree)
     float xf = req.x;
@@ -211,10 +205,10 @@ bool arm_control(dof4_robot_arm::Value2Robot::Request &req,
     // T matrix
     T <<  pow(t0,5),    pow(t0,4),    pow(t0,3),   pow(t0,2), t0, 1,
           5*pow(t0,4),  4*pow(t0,3),  3*pow(t0,2), 2*t0,      1,  0,
-	  20*pow(t0,3), 12*pow(t0,2), 6*t0,        1,         0,  0,
+	  20*pow(t0,3), 12*pow(t0,2), 6*t0,        2,         0,  0,
           pow(tf,5),    pow(tf,4),    pow(tf,3),   pow(tf,2), tf, 1,
           5*pow(tf,4),  4*pow(tf,3),  3*pow(tf,2), 2*tf,      1,  0,
-          20*pow(tf,3), 12*pow(tf,2), 6*tf,        1,         0,  0;
+          20*pow(tf,3), 12*pow(tf,2), 6*tf,        2,         0,  0;
     
     //find each coefficient according to the point assigned by using eigen.
     coeff_x = T.completeOrthogonalDecomposition().solve(i_f_x);
@@ -289,13 +283,13 @@ bool arm_control(dof4_robot_arm::Value2Robot::Request &req,
     ros::Duration(tf - t0).sleep();
 
     float q_check[4];
-
-    cout << "[debug]" << endl;    
-    for (int i = 0; i < JointNum; i ++) { 
+/*
+    cout << "[debug]" << endl;
+    for (int i = 0; i < JointNum; i ++) {
         q_check[i] = motor.getAngle(motor_id[i]) * deg2rad;
 	cout << i << "th q_val from motor: " << q_check[i] * rad2deg << endl;
     }
-
+*/
     res.cur_x = ((l1*sin(q_check[1]) + l2*sin(q_check[1]+q_check[2]) + l3*sin(q_check[1]+q_check[2]+q_check[3]))*cos(q_check[0]));
     res.cur_y = (l1*sin(q_check[1]) + l2*sin(q_check[1]+q_check[2]) + l3*sin(q_check[1]+q_check[2]+q_check[3]))*sin(q_check[0]);
     res.cur_z = l1*cos(q_check[1]) + l2*cos(q_check[1]+q_check[2]) + l3*cos(q_check[1]+q_check[2]+q_check[3]);
