@@ -7,7 +7,7 @@ Raspberry pi + ROS implementation of 4 Dof Robot Arm consisted with 3D printed P
 2. ROS kinetic
 
 ### B. System Diagram
-![alt text](https://github.com/yjoung-7874/Dof4_Robot_Arm/blob/master/Diagram.png)
+![alt text](https://github.com/yjoung-7874/Dof4_Robot_Arm/blob/master/diagram.png)
 
 ### C. Installation
 Clone the repository inside src/ directory of your catkin workspace
