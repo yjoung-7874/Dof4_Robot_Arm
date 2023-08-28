@@ -20,6 +20,7 @@ rosrun dof4_robot_arm dof4_robot_arm_client
 ```
 ### D. Experiment Video
 https://youtu.be/I8n40YT5L0M
+https://www.youtube.com/shorts/I8n40YT5L0M
 
 ### E. TODO
 0. GAZEBO simulation -> Robot moving
